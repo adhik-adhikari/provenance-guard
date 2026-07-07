@@ -99,5 +99,10 @@ def log():
     return jsonify({"entries": storage.get_log()})
 
 
+@app.route("/analytics", methods=["GET"])
+def analytics():
+    return jsonify(storage.get_analytics())
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5050)

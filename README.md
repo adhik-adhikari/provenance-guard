@@ -263,6 +263,34 @@ same editing pass. Neither signal is measuring "was any part of this AI-assisted
 only "does the final text read as AI-like" — so content that started as AI output
 and was meaningfully rewritten will tend to evade detection by design, not by bug.
 
+## Stretch Feature: Analytics Dashboard
+
+`GET /analytics` aggregates over every submission in the audit log and returns
+three metrics — no new signals or storage, purely a read-side view:
+
+1. **Detection pattern** — counts and ratios of `likely_ai` / `uncertain` /
+   `likely_human` verdicts.
+2. **Appeal rate** — fraction of submissions currently `under_review`.
+3. **Signal agreement rate** (chosen metric) — how often the LLM and
+   stylometric signals land on the same side of 0.5. This is specific to this
+   system's two-signal design: a low agreement rate is a diagnostic signal that
+   the two detectors are frequently disagreeing, which helps explain why a
+   given submission landed in `uncertain`.
+
+Example response (against the 3 log entries shown above):
+
+```json
+{
+  "total_submissions": 3,
+  "detection_pattern": {
+    "counts": {"likely_ai": 1, "likely_human": 1, "uncertain": 1},
+    "ratios": {"likely_ai": 0.333, "likely_human": 0.333, "uncertain": 0.333}
+  },
+  "appeal_rate": 0.333,
+  "signal_agreement_rate": 0.333
+}
+```
+
 ## Spec Reflection
 
 **How the spec helped:** writing out the exact label text and the 0.70/0.30

@@ -87,3 +87,38 @@ def get_log(limit=50):
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def get_analytics():
+    conn = get_connection()
+    rows = [dict(row) for row in conn.execute("SELECT * FROM submissions").fetchall()]
+    conn.close()
+
+    total = len(rows)
+    if total == 0:
+        return {
+            "total_submissions": 0,
+            "detection_pattern": {"likely_ai": 0, "uncertain": 0, "likely_human": 0},
+            "appeal_rate": 0.0,
+            "signal_agreement_rate": 0.0,
+        }
+
+    counts = {"likely_ai": 0, "uncertain": 0, "likely_human": 0}
+    appealed = 0
+    agreeing = 0
+    for row in rows:
+        counts[row["attribution"]] += 1
+        if row["status"] == "under_review":
+            appealed += 1
+        if (row["llm_score"] >= 0.5) == (row["stylometric_score"] >= 0.5):
+            agreeing += 1
+
+    return {
+        "total_submissions": total,
+        "detection_pattern": {
+            "counts": counts,
+            "ratios": {k: v / total for k, v in counts.items()},
+        },
+        "appeal_rate": appealed / total,
+        "signal_agreement_rate": agreeing / total,
+    }

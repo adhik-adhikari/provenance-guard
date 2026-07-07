@@ -222,3 +222,26 @@ understandable to someone with zero ML background.
   then appealing a piece of content and confirming via `GET /log` that `status`
   flips to `under_review` and both the original scores and the appeal reasoning
   appear on the same entry.
+
+## Stretch Feature: Analytics Dashboard
+
+Added after the required milestones, per the "update planning.md before starting
+any stretch feature" instruction.
+
+- **What it is:** a `GET /analytics` endpoint that aggregates over every row
+  already in the SQLite audit log — no new signals, no new storage, purely a
+  read-side view over existing data.
+- **Metrics (3, as required):**
+  1. **Detection pattern** — counts and ratios of `likely_ai` / `uncertain` /
+     `likely_human` across all submissions.
+  2. **Appeal rate** — `appealed_count / total_submissions`.
+  3. **Signal agreement rate** (chosen metric) — the fraction of submissions
+     where the LLM signal and the stylometric signal land on the same side of
+     0.5 (both lean AI or both lean human). This is a diagnostic metric for the
+     pipeline itself: a low agreement rate would mean the two signals are
+     frequently contradicting each other, which is useful context for
+     interpreting why some verdicts land in `uncertain`.
+- **Why these three:** the first two are the ones the rubric names directly;
+  the third was chosen because it's specific to *this* system's two-signal
+  design rather than a generic metric — it tells a reviewer something about
+  signal quality, not just outcome counts.
