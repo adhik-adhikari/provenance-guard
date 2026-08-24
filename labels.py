@@ -1,6 +1,6 @@
 LABELS = {
     "likely_ai": (
-        "Likely AI-Generated — Our analysis found strong signals that this "
+        "Likely AI-Generated — Our analysis found strong indications that this "
         "content was created by AI rather than written by a person."
     ),
     "uncertain": (
