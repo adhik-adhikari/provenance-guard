@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from dotenv import load_dotenv
@@ -23,6 +24,7 @@ limiter = Limiter(
 )
 
 storage.init_db()
+storage.seed_demo_data()
 
 
 @app.route("/")
@@ -113,4 +115,6 @@ def analytics():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5050)
+    port = int(os.environ.get("PORT", 5050))
+    debug = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
+    app.run(debug=debug, port=port)
