@@ -1,5 +1,6 @@
 // ── State ──────────────────────────────────────────────────────────────────
-let currentContentId = null;
+let currentContentId = null;   // content_id from the most recent analysis
+let appealTargetId   = null;   // content_id being appealed (from result card OR log table)
 
 // ── DOM refs ────────────────────────────────────────────────────────────────
 const textInput      = document.getElementById('text-input');
@@ -28,6 +29,16 @@ const submitAppealBtn= document.getElementById('submit-appeal-btn');
 
 const toast          = document.getElementById('toast');
 
+// ── Constants ───────────────────────────────────────────────────────────────
+const MIN_TEXT_LENGTH = 20;   // characters
+const MAX_TEXT_LENGTH = 8000; // characters — prevent absurdly large inputs
+
+const VERDICTS = {
+  likely_ai:    { label: 'LIKELY AI-GENERATED', cls: 'ai' },
+  likely_human: { label: 'LIKELY HUMAN-WRITTEN', cls: 'human' },
+  uncertain:    { label: 'UNCERTAIN ORIGIN',     cls: 'uncertain' },
+};
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function showToast(msg, duration = 3500) {
@@ -52,7 +63,6 @@ function setLoading(on) {
 }
 
 function fmt(n) {
-  // Format a 0-1 float as "0.85"
   return typeof n === 'number' ? n.toFixed(2) : '—';
 }
 
@@ -62,36 +72,51 @@ function pct(n) {
 
 function timeAgo(isoString) {
   const diff = (Date.now() - new Date(isoString).getTime()) / 1000;
-  if (diff < 60)  return 'just now';
+  if (diff < 60)   return 'just now';
   if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
   if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
   return Math.floor(diff / 86400) + 'd ago';
 }
 
-// ── Attribution display map ──────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
-const VERDICTS = {
-  likely_ai:    { label: 'LIKELY AI-GENERATED', cls: 'ai' },
-  likely_human: { label: 'LIKELY HUMAN-WRITTEN', cls: 'human' },
-  uncertain:    { label: 'UNCERTAIN ORIGIN',    cls: 'uncertain' },
-};
+// ── Input validation ─────────────────────────────────────────────────────────
+// Full authentication (login/password) would be overkill for a demo tool
+// where the rate limiter already handles abuse. Instead we validate inputs
+// client-side before they're sent to the API, which prevents empty submissions,
+// accidental pastes of huge documents, and malformed creator IDs.
+
+function validateInput(text, creatorId) {
+  if (!text) return 'Please paste some text first.';
+  if (text.length < MIN_TEXT_LENGTH)
+    return `Text is too short — paste at least ${MIN_TEXT_LENGTH} characters for a meaningful result.`;
+  if (text.length > MAX_TEXT_LENGTH)
+    return `Text is too long (${text.length} chars). Please trim it to under ${MAX_TEXT_LENGTH} characters.`;
+  if (creatorId && !/^[a-zA-Z0-9_\-\.@]{1,64}$/.test(creatorId))
+    return 'Creator ID can only contain letters, numbers, _, -, . and @ (max 64 chars).';
+  return null; // valid
+}
 
 // ── Analyze ──────────────────────────────────────────────────────────────────
 
 analyzeBtn.addEventListener('click', async () => {
-  const text = textInput.value.trim();
-  if (!text) { showError('Please paste some text first.'); return; }
+  const text      = textInput.value.trim();
+  const creatorId = creatorInput.value.trim();
+
   clearError();
+
+  const validationError = validateInput(text, creatorId);
+  if (validationError) { showError(validationError); return; }
+
   setLoading(true);
 
   try {
     const res = await fetch('/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        creator_id: creatorInput.value.trim() || 'anonymous',
-      }),
+      body: JSON.stringify({ text, creator_id: creatorId || 'anonymous' }),
     });
 
     if (res.status === 429) {
@@ -114,32 +139,25 @@ analyzeBtn.addEventListener('click', async () => {
 
 function showResult(data) {
   currentContentId = data.content_id;
+  appealTargetId   = data.content_id;  // appeal btn in result card targets latest result
 
   const v = VERDICTS[data.attribution] || VERDICTS.uncertain;
   const confPct = Math.round(data.confidence * 100);
 
-  // Verdict badge
-  verdictBadge.textContent = v.label;
-  verdictBadge.className   = 'verdict-badge ' + v.cls;
-
-  // Confidence text + bar
+  verdictBadge.textContent   = v.label;
+  verdictBadge.className     = 'verdict-badge ' + v.cls;
   confidenceText.textContent = `Confidence: ${confPct}%`;
   confBarFill.style.width    = confPct + '%';
   confBarFill.className      = 'confidence-bar-fill ' + v.cls;
+  labelText.textContent      = data.label;
 
-  // Label text
-  labelText.textContent = data.label;
-
-  // Scores
   llmVal.textContent   = fmt(data.llm_score);
   styloVal.textContent = fmt(data.stylometric_score);
   llmBar.style.width   = (data.llm_score * 100) + '%';
   styloBar.style.width = (data.stylometric_score * 100) + '%';
 
-  // Content ID
   contentIdVal.textContent = data.content_id;
 
-  // Show section
   resultSection.classList.remove('hidden');
   resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -148,24 +166,36 @@ function showResult(data) {
 
 newAnalysisBtn.addEventListener('click', () => {
   resultSection.classList.add('hidden');
-  textInput.value = '';
+  textInput.value    = '';
   creatorInput.value = '';
   textInput.focus();
   currentContentId = null;
+  appealTargetId   = null;
 });
 
 // ── Appeal ───────────────────────────────────────────────────────────────────
+// Appeals can be triggered from two places:
+//   1. The result card (after analyzing) — targets the most recent content_id
+//   2. The log table appeal button — targets any past submission
 
-appealBtn.addEventListener('click', () => {
-  if (!currentContentId) return;
+function openAppealModal(contentId) {
+  appealTargetId = contentId;
+  appealText.value = '';
   modalOverlay.classList.remove('hidden');
   appealText.focus();
-});
+}
 
 function closeModal() {
   modalOverlay.classList.add('hidden');
   appealText.value = '';
+  appealTargetId   = null;
 }
+
+// Appeal from result card
+appealBtn.addEventListener('click', () => {
+  if (!currentContentId) return;
+  openAppealModal(currentContentId);
+});
 
 modalClose.addEventListener('click', closeModal);
 cancelAppeal.addEventListener('click', closeModal);
@@ -176,15 +206,16 @@ modalOverlay.addEventListener('click', (e) => {
 submitAppealBtn.addEventListener('click', async () => {
   const reasoning = appealText.value.trim();
   if (!reasoning) { showToast('Please write your reasoning first.'); return; }
+  if (!appealTargetId)  { showToast('No submission selected.'); return; }
 
-  submitAppealBtn.disabled = true;
+  submitAppealBtn.disabled    = true;
   submitAppealBtn.textContent = 'Submitting…';
 
   try {
     const res = await fetch('/appeal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content_id: currentContentId, creator_reasoning: reasoning }),
+      body: JSON.stringify({ content_id: appealTargetId, creator_reasoning: reasoning }),
     });
     const data = await res.json();
     if (res.ok) {
@@ -197,7 +228,7 @@ submitAppealBtn.addEventListener('click', async () => {
   } catch {
     showToast('Could not reach the server.');
   } finally {
-    submitAppealBtn.disabled = false;
+    submitAppealBtn.disabled    = false;
     submitAppealBtn.textContent = 'Submit Appeal';
   }
 });
@@ -211,12 +242,12 @@ async function loadAnalytics() {
     const c    = data.detection_pattern?.counts || {};
 
     document.getElementById('stat-total').textContent     = data.total_submissions ?? '—';
-    document.getElementById('stat-ai').textContent        = c.likely_ai   ?? 0;
+    document.getElementById('stat-ai').textContent        = c.likely_ai    ?? 0;
     document.getElementById('stat-human').textContent     = c.likely_human ?? 0;
-    document.getElementById('stat-uncertain').textContent = c.uncertain   ?? 0;
+    document.getElementById('stat-uncertain').textContent = c.uncertain    ?? 0;
     document.getElementById('stat-appeal').textContent    = pct(data.appeal_rate);
     document.getElementById('stat-agreement').textContent = pct(data.signal_agreement_rate);
-  } catch { /* analytics is non-critical, fail silently */ }
+  } catch { /* analytics is non-critical */ }
 }
 
 // ── Log ──────────────────────────────────────────────────────────────────────
@@ -232,13 +263,21 @@ async function loadLog() {
 function renderLog(entries) {
   const tbody = document.getElementById('log-body');
   if (!entries.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="table-empty">No submissions yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="table-empty">No submissions yet.</td></tr>';
     return;
   }
 
   tbody.innerHTML = entries.map(e => {
-    const v     = VERDICTS[e.attribution] || VERDICTS.uncertain;
-    const badge = `<span class="status-badge ${e.status === 'under_review' ? 'status-review' : 'status-classified'}">${e.status === 'under_review' ? 'Under review' : 'Classified'}</span>`;
+    const v       = VERDICTS[e.attribution] || VERDICTS.uncertain;
+    const isUnderReview = e.status === 'under_review';
+
+    const statusBadge = `<span class="status-badge ${isUnderReview ? 'status-review' : 'status-classified'}">${isUnderReview ? 'Under review' : 'Classified'}</span>`;
+
+    // Show appeal button only if not already under review
+    const appealCell = isUnderReview
+      ? '<td></td>'
+      : `<td><button class="log-appeal-btn" data-id="${escHtml(e.content_id)}">Appeal</button></td>`;
+
     return `
       <tr>
         <td>${escHtml(e.creator_id || '—')}</td>
@@ -246,14 +285,16 @@ function renderLog(entries) {
         <td>${pct(e.confidence)}</td>
         <td>${fmt(e.llm_score)}</td>
         <td>${fmt(e.stylometric_score)}</td>
-        <td>${badge}</td>
+        <td>${statusBadge}</td>
         <td>${timeAgo(e.timestamp)}</td>
+        ${appealCell}
       </tr>`;
   }).join('');
-}
 
-function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Attach click handlers to all appeal buttons in the table
+  tbody.querySelectorAll('.log-appeal-btn').forEach(btn => {
+    btn.addEventListener('click', () => openAppealModal(btn.dataset.id));
+  });
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
