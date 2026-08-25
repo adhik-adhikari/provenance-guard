@@ -1,7 +1,7 @@
 import uuid
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -25,6 +25,11 @@ limiter = Limiter(
 storage.init_db()
 
 
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
 @app.route("/submit", methods=["POST"])
 @limiter.limit("10 per minute;100 per day")
 def submit():
@@ -35,39 +40,42 @@ def submit():
     if not text:
         return jsonify({"error": "text field is required"}), 400
 
-    content_id = str(uuid.uuid4())
-    llm_score = get_llm_score(text)
-    stylometric_score = get_stylometric_score(text)
-    result = score_confidence(llm_score, stylometric_score)
-    label = get_label(result["attribution"])
+    try:
+        content_id = str(uuid.uuid4())
+        llm_score = get_llm_score(text)
+        stylometric_score = get_stylometric_score(text)
+        result = score_confidence(llm_score, stylometric_score)
+        label = get_label(result["attribution"])
 
-    record = {
-        "content_id": content_id,
-        "creator_id": creator_id,
-        "text": text,
-        "timestamp": now_iso(),
-        "llm_score": llm_score,
-        "stylometric_score": stylometric_score,
-        "combined_score": result["combined_score"],
-        "confidence": result["confidence"],
-        "attribution": result["attribution"],
-        "label": label,
-        "status": "classified",
-        "appeal_reasoning": None,
-        "appeal_timestamp": None,
-    }
-    storage.insert_submission(record)
-
-    return jsonify(
-        {
+        record = {
             "content_id": content_id,
-            "attribution": result["attribution"],
-            "confidence": result["confidence"],
-            "label": label,
+            "creator_id": creator_id,
+            "text": text,
+            "timestamp": now_iso(),
             "llm_score": llm_score,
             "stylometric_score": stylometric_score,
+            "combined_score": result["combined_score"],
+            "confidence": result["confidence"],
+            "attribution": result["attribution"],
+            "label": label,
+            "status": "classified",
+            "appeal_reasoning": None,
+            "appeal_timestamp": None,
         }
-    )
+        storage.insert_submission(record)
+
+        return jsonify(
+            {
+                "content_id": content_id,
+                "attribution": result["attribution"],
+                "confidence": result["confidence"],
+                "label": label,
+                "llm_score": llm_score,
+                "stylometric_score": stylometric_score,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": f"Analysis failed: {str(e)}"}), 500
 
 
 @app.route("/appeal", methods=["POST"])

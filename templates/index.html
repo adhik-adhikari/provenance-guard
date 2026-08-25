@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Provenance Guard — classify text as AI-generated or human-written." />
+  <title>Provenance Guard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <span class="site-title">🛡 Provenance Guard</span>
+      <a href="https://github.com/adhik-adhikari/provenance-guard" target="_blank" class="gh-link">GitHub →</a>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Analyzer -->
+    <section class="analyzer">
+      <label for="text-input" class="input-label">Paste text to analyze</label>
+      <textarea id="text-input" placeholder="Paste a paragraph, essay, post, or any written passage here. Works best on 50+ words." rows="8"></textarea>
+
+      <div class="row">
+        <div class="creator-wrap">
+          <label for="creator-id">Creator ID</label>
+          <input type="text" id="creator-id" placeholder="optional" />
+        </div>
+        <button id="analyze-btn">Analyze</button>
+      </div>
+
+      <p class="error hidden" id="error-msg"></p>
+    </section>
+
+    <!-- Result (hidden until submit) -->
+    <section id="result-section" class="hidden">
+      <div class="result-card" id="result-card">
+        <div class="verdict-row">
+          <span class="verdict-badge" id="verdict-badge">—</span>
+          <span class="confidence-text" id="confidence-text">Confidence: —</span>
+        </div>
+
+        <div class="confidence-bar-wrap">
+          <div class="confidence-bar-track">
+            <div class="confidence-bar-fill" id="confidence-bar-fill"></div>
+          </div>
+        </div>
+
+        <p class="verdict-label-text" id="verdict-label-text"></p>
+
+        <div class="scores-row">
+          <div class="score-item">
+            <span class="score-name">LLM score</span>
+            <span class="score-val" id="llm-score-val">—</span>
+            <div class="score-bar-track"><div class="score-bar-fill" id="llm-bar"></div></div>
+          </div>
+          <div class="score-item">
+            <span class="score-name">Stylometric score</span>
+            <span class="score-val" id="stylo-score-val">—</span>
+            <div class="score-bar-track"><div class="score-bar-fill" id="stylo-bar"></div></div>
+          </div>
+        </div>
+
+        <div class="result-actions">
+          <button class="btn-secondary" id="appeal-btn">File an Appeal</button>
+          <button class="btn-ghost" id="new-analysis-btn">Analyze another</button>
+        </div>
+
+        <p class="content-id">Content ID: <code id="content-id-val">—</code></p>
+      </div>
+    </section>
+
+    <!-- Analytics -->
+    <section class="analytics">
+      <h2>Analytics</h2>
+      <div class="stats-row">
+        <div class="stat"><span class="stat-num" id="stat-total">—</span><span class="stat-lbl">Total</span></div>
+        <div class="stat ai-stat"><span class="stat-num" id="stat-ai">—</span><span class="stat-lbl">Likely AI</span></div>
+        <div class="stat human-stat"><span class="stat-num" id="stat-human">—</span><span class="stat-lbl">Likely Human</span></div>
+        <div class="stat uncertain-stat"><span class="stat-num" id="stat-uncertain">—</span><span class="stat-lbl">Uncertain</span></div>
+        <div class="stat"><span class="stat-num" id="stat-appeal">—</span><span class="stat-lbl">Appeal Rate</span></div>
+        <div class="stat"><span class="stat-num" id="stat-agreement">—</span><span class="stat-lbl">Signal Agreement</span></div>
+      </div>
+    </section>
+
+    <!-- Log -->
+    <section class="log">
+      <h2>Recent Submissions</h2>
+      <div class="table-scroll">
+        <table id="log-table">
+          <thead>
+            <tr>
+              <th>Creator</th>
+              <th>Attribution</th>
+              <th>Confidence</th>
+              <th>LLM</th>
+              <th>Stylometric</th>
+              <th>Status</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="log-body">
+            <tr><td colspan="7" class="table-empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Appeal Modal -->
+  <div class="modal-overlay hidden" id="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>File an Appeal</h3>
+        <button id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <p class="modal-desc">Explain why you think the classification is wrong. A human reviewer will see this alongside the original result.</p>
+      <textarea id="appeal-text" rows="5" placeholder="I wrote this myself because…"></textarea>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="cancel-appeal">Cancel</button>
+        <button id="submit-appeal-btn">Submit Appeal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
